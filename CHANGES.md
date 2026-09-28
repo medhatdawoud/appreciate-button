@@ -3,6 +3,29 @@
 A running record of the significant changes to this repository, newest first.
 Each entry is written so it can seed a PR description.
 
+## 2026-09-28 — The leaderboard by period
+
+- "Most appreciated" has a filter: Today, This week, This month, This
+  quarter, This year and All time, with This week by default. Periods are
+  UTC calendar periods, weeks from Monday. The choice is kept in the address
+  (`?period=month`), so a view can be shared, and Back returns to the one
+  before. A line under the filter says from which day it counts.
+- **Data:** a `button_days` table (migration 018) counts each button's clicks
+  per UTC day, in the same transaction as the click, and is deleted with its
+  button or site. Clicks made before it existed were never dated, so
+  migration 019 estimates: each visitor's clicks count on the day of their
+  last click.
+- **API:** `GET /v1/leaderboard` takes `?period=` (default `week`) and
+  answers `period` and `since`; an unknown period is a `400`. The row's link
+  stays the most-clicked page of all time.
+- **Tests:** unit tests for where each period starts (Mondays, month, quarter
+  and year ends, UTC midnight); integration tests for every period's window,
+  the default, a refused period, a counted click being dated and a capped
+  one not, deletes, and the backfill; an e2e test of the filter, the address,
+  reload and Back.
+- Known: on a phone the leaderboard table is slightly wider than the screen,
+  as it was before.
+
 ## 2026-09-27 — Appreciator is now Appreciate Button
 
 A clean rename, with no aliases for the old names. Pages that embed the

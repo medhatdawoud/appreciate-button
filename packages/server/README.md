@@ -552,11 +552,25 @@ copies `src/web` to `dist/web` and the repository's `site/` to `dist/site`.
 
 ## Leaderboard
 
-`GET /v1/leaderboard` (public, no credentials) ranks tenants by the clicks on
-all their buttons:
+`GET /v1/leaderboard?period=…` (public, no credentials) ranks tenants by the
+clicks on all their buttons in a period:
+
+- `period` is `today`, `week`, `month`, `quarter`, `year` or `all`, and
+  `week` when left out. Periods are calendar periods in UTC: today, the week
+  since Monday, the month since the 1st, the quarter since 1 January, April,
+  July or October, the year since 1 January. Anything else is a `400`.
+- `since` is the first UTC day counted (`YYYY-MM-DD`), `null` for `all`.
+- Periods add up `button_days`, each button's clicks per UTC day, written in
+  the same transaction as the click. `all` adds up the items' totals.
+- Clicks made before `button_days` existed (migration 019) are dated by an
+  estimate: each visitor's clicks on the UTC day of their last one, the only
+  date that was kept. The demo's "reset my votes" does not take clicks back
+  out of `button_days`; the demo is never listed.
 
 ```json
 {
+  "period": "week",
+  "since": "2026-09-28",
   "sites": [
     {
       "siteId": "1dd1100f-…",
@@ -583,8 +597,9 @@ page shows the name with the page's address under it, both one link, and
 because any allowed page can create counters it renders the link with
 `rel="nofollow ugc noopener noreferrer"`.
 
-`totalCount` is the sum of every item's total over every one of the tenant's
-buttons, and `buttonCount` is how many buttons it has. Sites are ordered by
+`totalCount` is the tenant's clicks in the period, over every one of its
+buttons, and `buttonCount` is how many buttons it has. The link is the
+most-clicked page of all time, whatever the period. Sites are ordered by
 `totalCount`, highest first, then by name, and capped at 100. Tenants with no
 clicks are left out, as are sites whose owner turned `showOnLeaderboard` off,
 and the landing page's `demo` tenant (a dashboard site that happens to be

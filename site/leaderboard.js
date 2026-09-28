@@ -1,8 +1,26 @@
 /**
- * Public leaderboard: sites on the instance ranked by total appreciation.
- * Reads `./config.json` for the API base.
+ * Public leaderboard: sites on the instance ranked by appreciation in a
+ * period, this week unless `?period=` in the address picks another. Reads
+ * `./config.json` for the API base.
  */
 (() => {
+  /** What the empty board says for each period; the keys are the API's periods. */
+  const EMPTY = {
+    today: 'No appreciation yet today.',
+    week: 'No appreciation yet this week.',
+    month: 'No appreciation yet this month.',
+    quarter: 'No appreciation yet this quarter.',
+    year: 'No appreciation yet this year.',
+    all: 'No appreciation has been recorded yet.',
+  };
+  const DEFAULT_PERIOD = 'week';
+
+  /** The period in the address, or the default for a missing or unknown one. */
+  function periodFromUrl() {
+    const period = new URLSearchParams(location.search).get('period');
+    return period !== null && Object.hasOwn(EMPTY, period) ? period : DEFAULT_PERIOD;
+  }
+
   function trimSlash(url) {
     return url.replace(/\/+$/, '');
   }
@@ -58,6 +76,26 @@
     return td;
   }
 
+  /** Presses the period's button, and says from which day it counts. */
+  function showPeriod(period, since) {
+    for (const button of document.querySelectorAll('[data-period]')) {
+      button.setAttribute('aria-pressed', String(button.dataset.period === period));
+    }
+    const note = document.querySelector('[data-board-since]');
+    note.hidden = since === null;
+    if (since !== null) {
+      const day = new Date(`${since}T00:00:00Z`).toLocaleDateString(undefined, {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+        timeZone: 'UTC',
+      });
+      note.textContent = `Counting from ${day} (UTC).`;
+    }
+    document.querySelector('[data-board-empty]').textContent = EMPTY[period];
+  }
+
   function render(entries) {
     const table = document.querySelector('[data-board]');
     const body = document.querySelector('[data-board-body]');
@@ -109,6 +147,51 @@
     }
   }
 
+  /** Counts loads, so an answer that arrives after a newer request is dropped. */
+  let latest = 0;
+
+  async function load(api, period) {
+    const request = (latest += 1);
+    showPeriod(period, null);
+    document.querySelector('[data-board-error]').hidden = true;
+    try {
+      const response = await fetch(`${api}/v1/leaderboard?period=${encodeURIComponent(period)}`, {
+        cache: 'no-store',
+      });
+      if (!response.ok) throw new Error(`status ${response.status}`);
+      const board = await response.json();
+      if (request !== latest) return;
+      showPeriod(board.period, board.since);
+      render(board.sites);
+      await markOwnSites(api);
+    } catch {
+      if (request !== latest) return;
+      document.querySelector('[data-board]').hidden = true;
+      document.querySelector('[data-board-empty]').hidden = true;
+      document.querySelector('[data-board-error]').hidden = false;
+    }
+  }
+
+  /**
+   * Switching period loads it and records it in the address, without the
+   * parameter for the default, so a view can be shared and Back returns to
+   * the one before.
+   */
+  function wirePeriods(api) {
+    for (const button of document.querySelectorAll('[data-period]')) {
+      button.addEventListener('click', () => {
+        const period = button.dataset.period;
+        if (period === periodFromUrl()) return;
+        const url = new URL(location.href);
+        if (period === DEFAULT_PERIOD) url.searchParams.delete('period');
+        else url.searchParams.set('period', period);
+        history.pushState(null, '', url);
+        load(api, period);
+      });
+    }
+    window.addEventListener('popstate', () => load(api, periodFromUrl()));
+  }
+
   async function main() {
     let config = {};
     try {
@@ -124,17 +207,9 @@
       return;
     }
 
-    try {
-      const response = await fetch(`${trimSlash(config.apiUrl)}/v1/leaderboard`, {
-        cache: 'no-store',
-      });
-      if (!response.ok) throw new Error(`status ${response.status}`);
-      const { sites } = await response.json();
-      render(sites);
-      await markOwnSites(trimSlash(config.apiUrl));
-    } catch {
-      document.querySelector('[data-board-error]').hidden = false;
-    }
+    const api = trimSlash(config.apiUrl);
+    wirePeriods(api);
+    await load(api, periodFromUrl());
   }
 
   main();

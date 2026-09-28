@@ -128,7 +128,7 @@ flowchart LR
     subgraph Instance["Your instance (one container)"]
         Proxy["Reverse proxy / TLS<br/>(Coolify, Caddy, nginx)"]
         Server["API server<br/>Fastify · Node 22<br/>serves pages + widget.js"]
-        DB[("MySQL 8<br/>accounts · tenants(sites)<br/>buttons · items · visitor_clicks")]
+        DB[("MySQL 8<br/>accounts · tenants(sites)<br/>buttons · items · visitor_clicks · button_days")]
         Proxy --> Server
         Server <--> DB
     end
@@ -208,6 +208,7 @@ sequenceDiagram
     S->>DB: UPDATE visitor_clicks SET count=count+1<br/>WHERE … AND count below maxClicks
     alt a row changed
         S->>DB: UPDATE items SET total_count=total_count+1
+        S->>DB: button_days: +1 for the button, today (UTC)
         S->>DB: COMMIT
         S-->>W: new counts (maxed if this was the last one)
     else visitor already at the cap
@@ -261,6 +262,7 @@ erDiagram
     tenants ||--o{ buttons : owns
     buttons ||--o{ items : "counts per item key"
     buttons ||--o{ visitor_clicks : "per visitor per item"
+    buttons ||--o{ button_days : "clicks per UTC day"
 
     accounts {
         char(36) id PK
@@ -301,6 +303,11 @@ erDiagram
         char(64) visitor_hash PK "HMAC-SHA256(secret, ip, ua)"
         int click_count
         timestamp last_click_at
+    }
+    button_days {
+        char(36) button_id PK
+        date day PK "UTC"
+        int clicks
     }
 ```
 
@@ -709,15 +716,15 @@ dashboard, authenticated by the session cookie instead of a bearer key.
 
 ### Everything else (no auth)
 
-| Method | Path                               |                                                                                         |
-| ------ | ---------------------------------- | --------------------------------------------------------------------------------------- |
-| `GET`  | `/`, `/leaderboard`, `/dashboard`  | the pages                                                                               |
-| `GET`  | `/config.json`, `/web/config.json` | `{ apiUrl, demoKey, signInEnabled, repoUrl, leaderboardEnabled, defaultIcon }`          |
-| `GET`  | `/v1/leaderboard`                  | `{ sites: [{ siteId, siteName, url, buttonCount, totalCount }] }`, CORS `*`, 60 s cache |
-| `GET`  | `/v1/leaderboard/mine`             | `{ siteIds }` the signed-in account owns, empty when signed out; same origin only       |
-| `GET`  | `/v1/sites/:siteId/badge.svg`      | the site's badge, `?label=`, `?color=`, 5 min cache; `badge.json` for shields.io        |
-| `GET`  | `/widget.js`                       | the widget bundle, 5 min cache, own per-IP limit                                        |
-| `GET`  | `/healthz`                         | `200`, or `503` when MySQL is unreachable                                               |
+| Method | Path                               |                                                                                                                                                                                                                   |
+| ------ | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/`, `/leaderboard`, `/dashboard`  | the pages                                                                                                                                                                                                         |
+| `GET`  | `/config.json`, `/web/config.json` | `{ apiUrl, demoKey, signInEnabled, repoUrl, leaderboardEnabled, defaultIcon }`                                                                                                                                    |
+| `GET`  | `/v1/leaderboard?period=…`         | `{ period, since, sites: [{ siteId, siteName, url, buttonCount, totalCount }] }`; `period` is `today`, `week` (default), `month`, `quarter`, `year` or `all`, in UTC with weeks from Monday; CORS `*`, 60 s cache |
+| `GET`  | `/v1/leaderboard/mine`             | `{ siteIds }` the signed-in account owns, empty when signed out; same origin only                                                                                                                                 |
+| `GET`  | `/v1/sites/:siteId/badge.svg`      | the site's badge, `?label=`, `?color=`, 5 min cache; `badge.json` for shields.io                                                                                                                                  |
+| `GET`  | `/widget.js`                       | the widget bundle, 5 min cache, own per-IP limit                                                                                                                                                                  |
+| `GET`  | `/healthz`                         | `200`, or `503` when MySQL is unreachable                                                                                                                                                                         |
 
 ## Configuration reference
 

@@ -5,6 +5,7 @@ import type { LeaderboardResponse } from '@appreciate-button/shared';
 import { expect, test } from '@playwright/test';
 
 import { API_ORIGIN, FIXTURE_PATH, PAGE_ORIGIN, type E2eFixture } from './constants.js';
+import { watchProblems } from './problems.js';
 
 const CLICKS = 3;
 
@@ -52,6 +53,64 @@ test('lists the e2e site with every click counted, and never the demo', async ({
   await expect(row).toHaveCount(1);
   await expect(row.getByRole('cell').nth(3)).toHaveText(String(previous + CLICKS));
   await expect(page.getByRole('cell', { name: 'demo', exact: true })).toHaveCount(0);
+});
+
+test('ranks this week by default, and switches period, keeping it in the address', async ({
+  page,
+  request,
+}) => {
+  const problems = await watchProblems(page);
+  // A click of this run's own, so the site has appreciation today whatever ran before.
+  const params = new URLSearchParams({
+    api: fixture.api,
+    key: fixture.publicKey,
+    item: `e2e-period-${randomUUID()}`,
+  });
+  await page.goto(`${PAGE_ORIGIN}/?${params.toString()}`);
+  const widget = page.locator('appreciate-button');
+  await expect(widget).toHaveAttribute('data-state', 'default');
+  await widget.locator('button').click();
+  await page.evaluate(() =>
+    (
+      document.querySelector('appreciate-button') as unknown as { whenIdle(): Promise<void> }
+    ).whenIdle(),
+  );
+  const countFor = async (period: string) => {
+    const board = (await (
+      await request.get(`${API_ORIGIN}/v1/leaderboard?period=${period}`)
+    ).json()) as LeaderboardResponse;
+    return String(board.sites.find((site) => site.siteName === fixture.siteName)?.totalCount);
+  };
+
+  await page.goto(`${API_ORIGIN}/leaderboard`);
+  const pressed = page.locator('[data-period][aria-pressed="true"]');
+  const since = page.locator('[data-board-since]');
+  const row = page
+    .getByRole('row')
+    .filter({ has: page.getByRole('cell', { name: fixture.siteName, exact: true }) });
+  await expect(pressed).toHaveText('This week');
+  await expect(since).toContainText('(UTC)');
+  await expect(row.getByRole('cell').nth(3)).toHaveText(await countFor('week'));
+
+  await page.getByRole('button', { name: 'All time' }).click();
+  await expect(page).toHaveURL(/\/leaderboard\?period=all$/);
+  await expect(pressed).toHaveText('All time');
+  await expect(since).toBeHidden();
+  await expect(row.getByRole('cell').nth(3)).toHaveText(await countFor('all'));
+
+  await page.getByRole('button', { name: 'Today' }).click();
+  await expect(page).toHaveURL(/\?period=today$/);
+  await expect(row.getByRole('cell').nth(3)).toHaveText(await countFor('today'));
+
+  await page.reload();
+  await expect(pressed).toHaveText('Today');
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\?period=all$/);
+  await expect(pressed).toHaveText('All time');
+
+  expect(await problems.csp()).toEqual([]);
+  expect(problems.console).toEqual([]);
 });
 
 test('links a site to its most-clicked public page, shown under its name', async ({ page }) => {
