@@ -1,13 +1,15 @@
 import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 
-import type { LeaderboardResponse } from '@appreciate-button/shared';
+import type { LeaderboardPeriod, LeaderboardResponse } from '@appreciate-button/shared';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { insertButton } from '../../src/db/buttons.js';
 import type { Pool } from '../../src/db/pool.js';
-import { execute } from '../../src/db/pool.js';
+import { execute, queryRows } from '../../src/db/pool.js';
 import { ensureDemoButton } from '../../src/lib/bootstrap.js';
 import { DEFAULT_COLORS, DEFAULT_SVG_SOURCE } from '../../src/lib/default-icon.js';
+import { periodStart } from '../../src/lib/leaderboard-period.js';
 import {
   SIGN_IN_CONFIG,
   closeTestContext,
@@ -41,6 +43,45 @@ async function seedItems(
       total,
     ]);
   }
+}
+
+/**
+ * A button on `tenantId` clicked `clicks` times on each UTC `day`, with an
+ * item carrying the same total, as clicks through the API would leave it.
+ */
+async function seedDays(
+  pool: Pool,
+  tenantId: string,
+  days: Array<[day: string, clicks: number]>,
+): Promise<void> {
+  const { id } = await insertButton(pool, {
+    tenantId,
+    name: null,
+    maxClicks: 10,
+    allowedOrigins: ['https://example.com'],
+    svgSource: DEFAULT_SVG_SOURCE,
+    colors: DEFAULT_COLORS,
+    svgSources: null,
+    urlNormalization: 'pathname',
+  });
+  for (const [day, clicks] of days) {
+    await execute(pool, 'INSERT INTO button_days (button_id, day, clicks) VALUES (?, ?, ?)', [
+      id,
+      day,
+      clicks,
+    ]);
+  }
+  const total = days.reduce((sum, [, clicks]) => sum + clicks, 0);
+  await execute(pool, 'INSERT INTO items (button_id, item_key, total_count) VALUES (?, ?, ?)', [
+    id,
+    'https://example.com/post',
+    total,
+  ]);
+}
+
+/** `days` after (or, negative, before) the UTC day `day`. */
+function shiftDay(day: string, days: number): string {
+  return new Date(Date.parse(`${day}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
 }
 
 /** A button on `tenantId` whose items carry these totals. */
@@ -77,11 +118,142 @@ describe('GET /v1/leaderboard', () => {
     await Promise.all(contexts.splice(0).map((created) => closeTestContext(created)));
   });
 
-  async function leaderboard(app: TestContext['app']) {
-    const response = await app.inject({ method: 'GET', url: '/v1/leaderboard' });
+  /** All time unless asked: most tests seed the items' totals only, with no days. */
+  async function leaderboard(app: TestContext['app'], period: LeaderboardPeriod = 'all') {
+    const response = await app.inject({ method: 'GET', url: `/v1/leaderboard?period=${period}` });
     expect(response.statusCode).toBe(200);
     return response.json() as LeaderboardResponse;
   }
+
+  describe('by period', () => {
+    it.each(['today', 'week', 'month', 'quarter', 'year'] as const)(
+      'counts %s from its first UTC day, and nothing before it',
+      async (period) => {
+        const { app, pool } = await context();
+        const since = periodStart(period, new Date()) as string;
+        await seedDays(pool, (await seedTenant(pool, 'Inside')).id, [
+          [since, 4],
+          [shiftDay(since, -1), 100],
+        ]);
+        await seedDays(pool, (await seedTenant(pool, 'Before')).id, [[shiftDay(since, -1), 9]]);
+
+        const board = await leaderboard(app, period);
+
+        expect(board).toMatchObject({ period, since });
+        expect(board.sites.map((site) => [site.siteName, site.totalCount])).toEqual([
+          ['Inside', 4],
+        ]);
+      },
+    );
+
+    it('counts every click of all time, dated or not', async () => {
+      const { app, pool } = await context();
+      await seedDays(pool, (await seedTenant(pool, 'Old')).id, [['2020-01-06', 9]]);
+      await seedDays(pool, (await seedTenant(pool, 'New')).id, [
+        [periodStart('today', new Date()) as string, 3],
+      ]);
+
+      const board = await leaderboard(app, 'all');
+
+      expect(board).toMatchObject({ period: 'all', since: null });
+      expect(board.sites.map((site) => [site.siteName, site.totalCount])).toEqual([
+        ['Old', 9],
+        ['New', 3],
+      ]);
+    });
+
+    it('ranks by this week when no period is asked for', async () => {
+      const { app, pool } = await context();
+      await seedDays(pool, (await seedTenant(pool, 'Recent')).id, [
+        [periodStart('week', new Date()) as string, 2],
+      ]);
+      await seedDays(pool, (await seedTenant(pool, 'Long ago')).id, [['2020-01-06', 50]]);
+
+      const response = await app.inject({ method: 'GET', url: '/v1/leaderboard' });
+
+      expect(response.json()).toMatchObject({
+        period: 'week',
+        since: periodStart('week', new Date()),
+        sites: [{ siteName: 'Recent', totalCount: 2 }],
+      });
+    });
+
+    it('refuses a period it does not know', async () => {
+      const { app } = await context();
+
+      const response = await app.inject({ method: 'GET', url: '/v1/leaderboard?period=decade' });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('dates each counted click on its UTC day, and not a click refused at the cap', async () => {
+      const { app, pool } = await context();
+      const tenant = await seedTenant(pool, 'Clicked');
+      const created = await app.inject({
+        method: 'POST',
+        url: '/v1/buttons',
+        headers: { authorization: tenant.authHeader },
+        payload: { maxClicks: 2, allowedOrigins: ['https://example.com'] },
+      });
+      const { publicKey } = created.json() as { publicKey: string };
+      for (let i = 0; i < 3; i += 1) {
+        await app.inject({
+          method: 'POST',
+          url: `/v1/buttons/${publicKey}/click`,
+          headers: { origin: 'https://example.com' },
+          payload: { item: 'https://example.com/post' },
+        });
+      }
+
+      const board = await leaderboard(app, 'today');
+
+      expect(board.sites.map((site) => [site.siteName, site.totalCount])).toEqual([['Clicked', 2]]);
+    });
+
+    it("fills in the days of clicks made before they were dated, from each visitor's last click", async () => {
+      const { pool } = await context();
+      const tenant = await seedTenant(pool, 'Backfilled');
+      const { id } = await insertButton(pool, {
+        tenantId: tenant.id,
+        name: null,
+        maxClicks: 10,
+        allowedOrigins: ['*'],
+        svgSource: DEFAULT_SVG_SOURCE,
+        colors: DEFAULT_COLORS,
+        svgSources: null,
+        urlNormalization: 'pathname',
+      });
+      for (const [visitor, clicks, at] of [
+        ['a', 3, '2026-03-01 23:30:00'],
+        ['b', 2, '2026-03-01 08:00:00'],
+        ['c', 5, '2026-03-02 00:10:00'],
+        ['d', 0, '2026-03-03 12:00:00'],
+      ] as const) {
+        await execute(
+          pool,
+          `INSERT INTO visitor_clicks (button_id, item_key, visitor_hash, click_count, last_click_at)
+           VALUES (?, 'https://example.com/post', ?, ?, ?)`,
+          [id, visitor, clicks, at],
+        );
+      }
+      const backfill = await readFile(
+        new URL('../../src/db/migrations/019_button_days_backfill.sql', import.meta.url),
+        'utf8',
+      );
+
+      await execute(pool, backfill.trim().replace(/;$/, ''), []);
+
+      const rows = await queryRows<{ day: string; clicks: number }>(
+        pool,
+        "SELECT DATE_FORMAT(day, '%Y-%m-%d') AS day, clicks FROM button_days WHERE button_id = ? ORDER BY day",
+        [id],
+      );
+      expect(rows).toEqual([
+        { day: '2026-03-01', clicks: 5 },
+        { day: '2026-03-02', clicks: 5 },
+      ]);
+    });
+  });
 
   it('ranks tenants by the clicks on all their buttons, then by name', async () => {
     const { app, pool } = await context();

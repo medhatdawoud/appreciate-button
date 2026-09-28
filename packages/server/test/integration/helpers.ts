@@ -30,7 +30,7 @@ export const TEST_DATABASE_URL =
 export const TEST_VISITOR_SECRET = 'integration-test-secret-0123456789ab';
 
 /** Tables in dependency order; used to reset state between tests. */
-const TABLES = ['visitor_clicks', 'items', 'buttons', 'tenants', 'accounts'];
+const TABLES = ['button_days', 'visitor_clicks', 'items', 'buttons', 'tenants', 'accounts'];
 
 export function testConfig(overrides: Partial<AppConfig> = {}): AppConfig {
   return {

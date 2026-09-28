@@ -1,6 +1,7 @@
 import type {
   LeaderboardEntry,
   LeaderboardMineResponse,
+  LeaderboardPeriod,
   LeaderboardResponse,
 } from '@appreciate-button/shared';
 import type { FastifyInstance } from 'fastify';
@@ -8,6 +9,11 @@ import type { FastifyInstance } from 'fastify';
 import { queryRows } from '../db/pool.js';
 import { DEMO_TENANT_NAME } from '../lib/bootstrap.js';
 import { notFound } from '../lib/errors.js';
+import {
+  DEFAULT_LEADERBOARD_PERIOD,
+  LEADERBOARD_PERIODS,
+  periodStart,
+} from '../lib/leaderboard-period.js';
 import { registerIpRateLimit } from '../lib/rate-limit.js';
 import { SESSION_COOKIE, readSession } from '../lib/session.js';
 
@@ -28,6 +34,10 @@ interface LeaderboardRow {
   site_name: string;
   button_count: number | string;
   total_count: number | string;
+}
+
+interface LeaderboardQuery {
+  period?: LeaderboardPeriod;
 }
 
 interface PageRow {
@@ -82,8 +92,10 @@ function topPages(rows: PageRow[]): Map<string, string> {
 }
 
 /**
- * The public leaderboard: every tenant with at least one click, ranked by
- * the clicks on all of its buttons.
+ * The public leaderboard: every tenant with at least one click in the period
+ * asked for (`?period=`, this week by default), ranked by the clicks on all
+ * of its buttons. Periods count from `button_days`, all time from the items'
+ * totals; a site's link is its most-clicked page of all time either way.
  *
  * Read by a static page that may live on another host, so it allows any
  * origin; it carries no credentials and nothing a tenant has not already
@@ -97,16 +109,29 @@ export async function leaderboardRoutes(app: FastifyInstance): Promise<void> {
   // button routes, in a scope and store of its own.
   await registerIpRateLimit(app, app.appConfig.rateLimitMax);
 
-  app.get(
+  app.get<{ Querystring: LeaderboardQuery }>(
     '/v1/leaderboard',
     {
       schema: {
+        querystring: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            period: {
+              type: 'string',
+              enum: [...LEADERBOARD_PERIODS],
+              default: DEFAULT_LEADERBOARD_PERIOD,
+            },
+          },
+        },
         response: {
           200: {
             type: 'object',
             additionalProperties: false,
-            required: ['sites'],
+            required: ['period', 'since', 'sites'],
             properties: {
+              period: { type: 'string', enum: [...LEADERBOARD_PERIODS] },
+              since: { type: ['string', 'null'] },
               sites: {
                 type: 'array',
                 items: {
@@ -127,28 +152,41 @@ export async function leaderboardRoutes(app: FastifyInstance): Promise<void> {
         },
       },
     },
-    async (_request, reply): Promise<LeaderboardResponse> => {
+    async (request, reply): Promise<LeaderboardResponse> => {
       if (!app.appConfig.leaderboardEnabled) {
         throw notFound('The leaderboard is not enabled on this server', 'leaderboard_disabled');
       }
+      const period = request.query.period ?? DEFAULT_LEADERBOARD_PERIOD;
+      const since = periodStart(period, new Date());
 
-      // COUNT(DISTINCT): the items join repeats each button once per item.
+      // Each button's clicks, one row per button: all time from its items,
+      // a period from its days since the period began.
+      const clicks =
+        since === null
+          ? {
+              sql: 'SELECT button_id, SUM(total_count) AS clicks FROM items GROUP BY button_id',
+              params: [],
+            }
+          : {
+              sql: 'SELECT button_id, SUM(clicks) AS clicks FROM button_days WHERE day >= ? GROUP BY button_id',
+              params: [since],
+            };
       const rows = await queryRows<LeaderboardRow>(
         app.pool,
         `SELECT t.id AS tenant_id,
                 t.name AS site_name,
-                COUNT(DISTINCT b.id) AS button_count,
-                COALESCE(SUM(i.total_count), 0) AS total_count
+                COUNT(b.id) AS button_count,
+                COALESCE(SUM(c.clicks), 0) AS total_count
            FROM tenants t
            JOIN buttons b ON b.tenant_id = t.id
-           LEFT JOIN items i ON i.button_id = b.id
+           LEFT JOIN (${clicks.sql}) c ON c.button_id = b.id
           WHERE NOT (t.name = ? AND t.account_id IS NULL)
             AND t.show_on_leaderboard = 1
           GROUP BY t.id, t.name
          HAVING total_count > 0
           ORDER BY total_count DESC, t.name ASC
           LIMIT ?`,
-        [DEMO_TENANT_NAME, LEADERBOARD_SIZE],
+        [...clicks.params, DEMO_TENANT_NAME, LEADERBOARD_SIZE],
       );
 
       // Each site's most-clicked pages, summed over its buttons, since two
@@ -182,6 +220,8 @@ export async function leaderboardRoutes(app: FastifyInstance): Promise<void> {
         .header('access-control-allow-origin', '*')
         .header('cache-control', LEADERBOARD_CACHE_CONTROL);
       return {
+        period,
+        since,
         sites: rows.map((row): LeaderboardEntry => ({
           siteId: row.tenant_id,
           siteName: row.site_name,

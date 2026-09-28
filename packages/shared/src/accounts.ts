@@ -75,7 +75,7 @@ export interface LeaderboardEntry {
    */
   url: string | null;
   buttonCount: number;
-  /** Every click on every one of the site's buttons. */
+  /** The clicks on every one of the site's buttons in the period asked for. */
   totalCount: number;
 }
 
@@ -84,7 +84,16 @@ export interface LeaderboardMineResponse {
   siteIds: string[];
 }
 
-/** GET /v1/leaderboard: the top sites by total clicks. */
+/**
+ * What the leaderboard ranks by: the clicks made since the start of the
+ * current UTC day, week (from Monday), month, quarter or year, or all of them.
+ */
+export type LeaderboardPeriod = 'today' | 'week' | 'month' | 'quarter' | 'year' | 'all';
+
+/** GET /v1/leaderboard: the top sites by clicks in a period. */
 export interface LeaderboardResponse {
+  period: LeaderboardPeriod;
+  /** The first UTC day counted, `YYYY-MM-DD`; null for `all`. */
+  since: string | null;
   sites: LeaderboardEntry[];
 }

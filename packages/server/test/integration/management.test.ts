@@ -1328,6 +1328,11 @@ describe('management routes', () => {
         'INSERT INTO visitor_clicks (button_id, item_key, visitor_hash, click_count) VALUES (?, ?, ?, ?)',
         [created.buttonId, 'https://example.com/p', 'a'.repeat(64), 4],
       );
+      await execute(
+        context.pool,
+        'INSERT INTO button_days (button_id, day, clicks) VALUES (?, UTC_DATE(), ?)',
+        [created.buttonId, 4],
+      );
 
       const response = await context.app.inject({
         method: 'DELETE',
@@ -1346,6 +1351,11 @@ describe('management routes', () => {
       ).toBeUndefined();
       expect(
         await queryOne(context.pool, 'SELECT item_key FROM visitor_clicks WHERE button_id = ?', [
+          created.buttonId,
+        ]),
+      ).toBeUndefined();
+      expect(
+        await queryOne(context.pool, 'SELECT day FROM button_days WHERE button_id = ?', [
           created.buttonId,
         ]),
       ).toBeUndefined();

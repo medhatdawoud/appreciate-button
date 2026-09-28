@@ -653,6 +653,7 @@ async function buttonRoutes(app: FastifyInstance, options: ButtonRoutesOptions):
         }
         await execute(connection, 'DELETE FROM visitor_clicks WHERE button_id = ?', [buttonId]);
         await execute(connection, 'DELETE FROM items WHERE button_id = ?', [buttonId]);
+        await execute(connection, 'DELETE FROM button_days WHERE button_id = ?', [buttonId]);
         return true;
       });
 

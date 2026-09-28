@@ -242,7 +242,7 @@ describe('sites', () => {
         [button.buttonId, 'https://example.com/post', 7],
       );
       const listed = async () =>
-        (await context.app.inject({ method: 'GET', url: '/v1/leaderboard' }))
+        (await context.app.inject({ method: 'GET', url: '/v1/leaderboard?period=all' }))
           .json()
           .sites.map((site: { siteName: string }) => site.siteName);
       expect(await listed()).toEqual(['Braggable']);
@@ -358,6 +358,11 @@ describe('sites', () => {
         'INSERT INTO visitor_clicks (button_id, item_key, visitor_hash, click_count) VALUES (?, ?, ?, ?)',
         [buttonId, 'https://example.com/p', 'a'.repeat(64), 1],
       );
+      await execute(
+        context.pool,
+        'INSERT INTO button_days (button_id, day, clicks) VALUES (?, UTC_DATE(), ?)',
+        [buttonId, 1],
+      );
     }
 
     it('deletes the site with its buttons and counters, and nothing else', async () => {
@@ -376,7 +381,7 @@ describe('sites', () => {
 
       expect(response.statusCode).toBe(204);
       expect((await listSites()).map((site) => site.name)).toEqual(['Kept']);
-      for (const table of ['items', 'visitor_clicks']) {
+      for (const table of ['items', 'visitor_clicks', 'button_days']) {
         const rows = await queryRows<{ button_id: string }>(
           context.pool,
           `SELECT button_id FROM ${table}`,

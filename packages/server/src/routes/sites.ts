@@ -248,6 +248,11 @@ export async function siteRoutes(app: FastifyInstance): Promise<void> {
           'DELETE FROM items WHERE button_id IN (SELECT id FROM buttons WHERE tenant_id = ?)',
           [siteId],
         );
+        await execute(
+          connection,
+          'DELETE FROM button_days WHERE button_id IN (SELECT id FROM buttons WHERE tenant_id = ?)',
+          [siteId],
+        );
         await execute(connection, 'DELETE FROM buttons WHERE tenant_id = ?', [siteId]);
         await execute(connection, 'DELETE FROM tenants WHERE id = ?', [siteId]);
         return true;

@@ -134,11 +134,18 @@ async function attemptIncrement(pool: Pool, params: IncrementParams): Promise<Cl
         return counts;
       }
 
-      // 3. Only now does the public total move.
+      // 3. Only now does the public total move, and the button's count for
+      // today (UTC), which the leaderboard's periods add up.
       await execute(
         connection,
         'UPDATE items SET total_count = total_count + 1 WHERE button_id = ? AND item_key = ?',
         [buttonId, itemKey],
+      );
+      await execute(
+        connection,
+        `INSERT INTO button_days (button_id, day, clicks) VALUES (?, UTC_DATE(), 1)
+         ON DUPLICATE KEY UPDATE clicks = clicks + 1`,
+        [buttonId],
       );
 
       // Read inside the transaction so the response reflects exactly what was

@@ -259,7 +259,14 @@ async function main(): Promise<void> {
   const config = loadAppConfig({ ...process.env, ...ENV });
   const pool = createPool(config.databaseUrl);
   await runMigrations(pool);
-  for (const table of ['visitor_clicks', 'items', 'buttons', 'tenants', 'accounts']) {
+  for (const table of [
+    'button_days',
+    'visitor_clicks',
+    'items',
+    'buttons',
+    'tenants',
+    'accounts',
+  ]) {
     await pool.query(`DELETE FROM \`${table}\``);
   }
 
