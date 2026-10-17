@@ -417,6 +417,9 @@ export interface ErrorDetail {
  * and the cursor pass to whatever holds it (see `renderReadonly`). Toggling
  * it takes effect at once, with no reload.
  *
+ * `iconSource` (a property) draws a page-supplied SVG instead of the
+ * button's icon.
+ *
  * Reflects `data-state` (`default` | `clicked` | `full`), `data-icons`
  * (`single` | `states`), `data-ring` and `data-error` on itself, and dispatches `appreciate:ready`, `appreciate:change`,
  * `appreciate:maxed` (detail: ClickCounts) and `appreciate:error`
@@ -466,6 +469,12 @@ export class AppreciateButton extends HTMLElement {
 
   /** The config the icon is currently drawn from, as JSON, to skip redrawing an unchanged one. */
   private painted: string | null = null;
+
+  /** Set through `iconSource`: the page's own icon, drawn instead of the config's. */
+  private iconOverride: string | null = null;
+
+  /** The last config handed to `applyConfig`, to redraw it when `iconSource` changes. */
+  private lastConfig: ButtonPublicConfig | null = null;
 
   /** The number the count currently shows, to tell a rise from a correction. */
   private shownTotal: number | null = null;
@@ -544,6 +553,29 @@ export class AppreciateButton extends HTMLElement {
     this.previewConfig = config;
     this.scheduleInitialize();
     return this.ready;
+  }
+
+  /**
+   * An SVG the page draws instead of the button's own icon, or null for the
+   * button's. Only the drawing changes: the colours, ring, burst, sound and
+   * counting stay the button's. Sanitised like any icon; one that cannot be
+   * parsed shows `invalid_svg`, as an unusable button icon would.
+   */
+  get iconSource(): string | null {
+    return this.iconOverride;
+  }
+
+  set iconSource(svg: string | null) {
+    this.iconOverride = svg;
+    // Before the first config the override simply waits for it.
+    if (this.lastConfig === null) return;
+    if (!this.applyConfig(this.lastConfig)) {
+      this.fail('invalid_svg', 'The button icon could not be parsed');
+      return;
+    }
+    // Recovering from an unusable override means loading the button again.
+    if (this.getAttribute('data-error') === 'invalid_svg') this.scheduleInitialize();
+    else this.render();
   }
 
   /** Counts as currently displayed, including clicks not yet confirmed. */
@@ -704,7 +736,13 @@ export class AppreciateButton extends HTMLElement {
    * the same config is already drawn, so a fresh copy of a cached config does
    * not flicker. False if the icon cannot be parsed.
    */
-  private applyConfig(config: ButtonPublicConfig): boolean {
+  private applyConfig(given: ButtonPublicConfig): boolean {
+    this.lastConfig = given;
+    // The page's own icon replaces the config's, recoloured like any single icon.
+    const config: ButtonPublicConfig =
+      this.iconOverride === null
+        ? given
+        : { ...given, svgSource: this.iconOverride, svgSources: undefined, keepIconColors: false };
     const signature = JSON.stringify(config);
     if (signature === this.painted) return true;
     const icons = parseIcons(config);

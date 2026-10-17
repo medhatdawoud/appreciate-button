@@ -1125,6 +1125,112 @@ describe('AppreciateButton', () => {
     });
   });
 
+  describe('iconSource', () => {
+    const STAR =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2l3 7h7l-6 5 2 8-6-4-6 4 2-8-6-5h7z"/></svg>';
+
+    /** The path data each drawn icon layer and burst copy carries. */
+    function drawn(element: AppreciateButton): { icon: string[]; burst: string[] } {
+      const paths = (selector: string) =>
+        Array.from(
+          shadow(element).querySelectorAll(selector),
+          (path) => path.getAttribute('d') ?? '',
+        );
+      return {
+        icon: paths('[part="icon"] > svg path'),
+        burst: paths('[part="burst"] > svg path'),
+      };
+    }
+
+    it("draws the page's icon instead of the button's, and the button's again on null", async () => {
+      const element = await mountReady();
+      const own = drawn(element);
+
+      element.iconSource = STAR;
+
+      expect(element.iconSource).toBe(STAR);
+      const star = drawn(element);
+      expect(star.icon).toHaveLength(2);
+      expect(new Set([...star.icon, ...star.burst])).toEqual(
+        new Set(['M12 2l3 7h7l-6 5 2 8-6-4-6 4 2-8-6-5h7z']),
+      );
+      expect(element.getAttribute('data-icons')).toBe('single');
+
+      element.iconSource = null;
+
+      expect(drawn(element)).toEqual(own);
+    });
+
+    it('keeps counting through the change, with the same colours', async () => {
+      const element = await mountReady();
+      element.iconSource = STAR;
+
+      await clickAndSettle(element);
+
+      expect(countText(element)).toBe('1');
+      expect(innerButton(element).style.getPropertyValue('--_c-full')).toBe('#444444');
+    });
+
+    it('waits for the config when set before the button has loaded', async () => {
+      const element = mount(document.body, { api: API, key: KEY, item: 'article-1' });
+      element.iconSource = STAR;
+
+      await element.whenReady();
+
+      expect(new Set(drawn(element).icon)).toEqual(
+        new Set(['M12 2l3 7h7l-6 5 2 8-6-4-6 4 2-8-6-5h7z']),
+      );
+    });
+
+    it('replaces four state icons and own colours alike with one recoloured icon', async () => {
+      vi.unstubAllGlobals();
+      server = installFakeServer(
+        sampleConfig({ svgSources: sampleSvgSources(), keepIconColors: true }),
+      );
+      const element = await mountReady();
+
+      element.iconSource = STAR;
+
+      expect(element.getAttribute('data-icons')).toBe('single');
+      expect(element.hasAttribute('data-own-colors')).toBe(false);
+    });
+
+    it('applies to a preview too', async () => {
+      const element = document.createElement('appreciate-button') as AppreciateButton;
+      document.body.append(element);
+      element.iconSource = STAR;
+
+      await element.preview(sampleConfig());
+
+      expect(new Set(drawn(element).icon)).toEqual(
+        new Set(['M12 2l3 7h7l-6 5 2 8-6-4-6 4 2-8-6-5h7z']),
+      );
+    });
+
+    it('strips script from it like any icon', async () => {
+      const element = await mountReady();
+
+      element.iconSource = STAR.replace('</svg>', '<script>window.hacked = true</script></svg>');
+
+      expect(shadow(element).querySelector('script')).toBeNull();
+      expect(drawn(element).icon).toHaveLength(2);
+    });
+
+    it('shows invalid_svg for one that cannot be parsed, and recovers once replaced', async () => {
+      const element = await mountReady();
+
+      element.iconSource = 'not an svg';
+
+      expect(element.getAttribute('data-error')).toBe('invalid_svg');
+
+      element.iconSource = null;
+      await element.whenReady();
+
+      expect(element.hasAttribute('data-error')).toBe(false);
+      expect(innerButton(element).disabled).toBe(false);
+    });
+  });
+
   describe('preview()', () => {
     async function previewed(
       overrides: Parameters<typeof sampleConfig>[0] = {},

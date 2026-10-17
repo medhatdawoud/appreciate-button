@@ -236,11 +236,17 @@ document.addEventListener('appreciate:burst', (event) => {
   the server would, so the fill, pulse, count, burst and full state play as
   they do live. Calling it again starts over. The dashboard's "Try it" uses
   it.
+- `iconSource` (a property) draws a page-supplied SVG instead of the button's
+  own icon, and `null` brings the button's back. Only the drawing changes: the
+  button's colours, ring, burst, sound and counting stay as configured. It is
+  sanitised like any icon, and one that cannot be parsed shows `invalid_svg`.
+  The landing page's "Try it as" menu uses it to show the demos with other
+  icons.
 
 The bundle also exports `stateIcon(config, state)`, which returns the icon as
 it looks in one state (`default`, `hover`, `clicked`, `full`) as a standalone
 SVG element, painted as the button paints it. The dashboard draws its colour
-table with it (`Appreciate Button.stateIcon` from the script tag).
+table with it (`AppreciateButton.stateIcon` from the script tag).
 
 ## How it behaves
 
