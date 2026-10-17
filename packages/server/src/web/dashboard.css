@@ -396,3 +396,36 @@ button.link {
   display: block;
   margin-bottom: 0.5rem;
 }
+
+/* The suggested icons in the button form: one pressed tile per icon. */
+.icon-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.icon-suggestion {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  cursor: pointer;
+}
+
+.icon-suggestion:hover {
+  border-color: var(--muted);
+}
+
+.icon-suggestion[aria-pressed='true'] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.icon-suggestion svg {
+  width: 100%;
+  height: 100%;
+}

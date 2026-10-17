@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { queryOne, queryRows } from '../../src/db/pool.js';
 import {
   DEMO_BUTTON_NAME,
+  DEMO_MAX_CLICKS,
   DEMO_TENANT_NAME,
   MANAGEMENT_TENANT_NAME,
   ensureDemoButton,
@@ -89,7 +90,7 @@ describe('ensureManagementTenant', () => {
 
 describe('ensureDemoButton', () => {
   let context: TestContext;
-  const settings = { demoAllowedOrigins: ['https://appreciate-button.test'], defaultMaxClicks: 10 };
+  const settings = { demoAllowedOrigins: ['https://appreciate-button.test'] };
 
   beforeAll(async () => {
     context = await createTestContext(SIGN_IN_CONFIG);
@@ -115,7 +116,11 @@ describe('ensureDemoButton', () => {
       name: string;
       allowed_origins: unknown;
       svg_source: string;
-    }>(context.pool, 'SELECT id, public_key, name, allowed_origins, svg_source FROM buttons');
+      max_clicks: number;
+    }>(
+      context.pool,
+      'SELECT id, public_key, name, allowed_origins, svg_source, max_clicks FROM buttons',
+    );
     return { tenants, buttons };
   }
 
@@ -138,6 +143,7 @@ describe('ensureDemoButton', () => {
       public_key: first.publicKey,
       name: DEMO_BUTTON_NAME,
       svg_source: DEFAULT_SVG_SOURCE,
+      max_clicks: DEMO_MAX_CLICKS,
     });
     expect(origins(buttons[0]?.allowed_origins)).toEqual(['https://appreciate-button.test']);
   });
@@ -152,6 +158,19 @@ describe('ensureDemoButton', () => {
     const { tenants, buttons } = await demoRows();
     expect(tenants).toHaveLength(1);
     expect(buttons).toHaveLength(1);
+  });
+
+  it('gives visitors five clicks on the demo, and brings an older demo back to five', async () => {
+    expect(DEMO_MAX_CLICKS).toBe(5);
+    const first = await ensureDemoButton(context.pool, settings);
+    await queryOne(context.pool, 'UPDATE buttons SET max_clicks = 10 WHERE id = ?', [
+      first.buttonId,
+    ]);
+
+    await ensureDemoButton(context.pool, settings);
+
+    const { buttons } = await demoRows();
+    expect(buttons.map((button) => button.max_clicks)).toEqual([DEMO_MAX_CLICKS]);
   });
 
   it('follows DEMO_ALLOWED_ORIGINS when it changes, keeping the same button', async () => {

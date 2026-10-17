@@ -451,6 +451,63 @@
       const icon = config && window.AppreciateButton?.stateIcon(config, cell.dataset.swatch);
       cell.replaceChildren(...(icon ? [icon] : []));
     }
+    renderSuggestions();
+  }
+
+  /**
+   * The suggested icons above the icon modes, the same ones the landing
+   * page offers. Picking the heart is the built-in icon; any other fills in
+   * "One SVG" with it, ready to save or change. Each is drawn full, in the
+   * form's full colour, and the one the form currently holds is pressed.
+   */
+  function renderSuggestions() {
+    const row = $('[data-icon-suggestions]');
+    const icons = window.appreciateDemoIcons;
+    const heart = state.config?.defaultIcon?.svgSource;
+    if (!row || !Array.isArray(icons) || !heart || !window.AppreciateButton) return;
+    if (row.childElementCount === 0) {
+      for (const icon of icons) {
+        const tile = document.createElement('button');
+        tile.type = 'button';
+        tile.className = 'icon-suggestion';
+        tile.dataset.iconId = icon.id;
+        tile.title = icon.label;
+        tile.setAttribute('aria-label', icon.label);
+        tile.addEventListener('click', () => {
+          if (icon.svg === null) {
+            form.elements.iconMode.value = 'default';
+          } else {
+            form.elements.iconMode.value = 'single';
+            form.elements.svgSource.value = icon.svg;
+            form.elements.keepIconColors.checked = false;
+          }
+          updateIconMode();
+        });
+        row.append(tile);
+      }
+    }
+    const colors = readColors();
+    const mode = iconMode();
+    // Redrawn only when their colour changes: a field losing focus fires
+    // `change`, and replacing a tile's drawing between the press and the
+    // release of a click on it would cancel that click.
+    const redraw = row.dataset.drawnIn !== colors.full;
+    row.dataset.drawnIn = colors.full;
+    for (const tile of row.children) {
+      const icon = icons.find((candidate) => candidate.id === tile.dataset.iconId);
+      if (redraw) {
+        const drawing = window.AppreciateButton.stateIcon(
+          { svgSource: icon.svg ?? heart, colors, keepIconColors: false },
+          'full',
+        );
+        tile.replaceChildren(...(drawing ? [drawing] : []));
+      }
+      const picked =
+        icon.svg === null
+          ? mode === 'default'
+          : mode === 'single' && form.elements.svgSource.value.trim() === icon.svg;
+      tile.setAttribute('aria-pressed', String(picked));
+    }
   }
 
   const tryButton = $('[data-preview-button]');

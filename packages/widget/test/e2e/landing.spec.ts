@@ -114,13 +114,14 @@ test('bursts until the demo is used up, then stops, and resets for another try',
   await expect(reset).toBeHidden();
   await expect(hero).toHaveAttribute('data-state', 'default');
   await expect(hero).toHaveAttribute('data-progress', '0');
-  await expect(count).toHaveText(String(full - 10));
+  // The demo gives five clicks; the reset takes all five back.
+  await expect(count).toHaveText(String(full - 5));
   await expect(button).not.toHaveAttribute('aria-disabled', /.*/);
-  const start = full - 10;
+  const start = full - 5;
 
   await button.click();
   await expect(count).toHaveText(String(start + 1));
-  await expect(hero).toHaveAttribute('data-progress', '10');
+  await expect(hero).toHaveAttribute('data-progress', '20');
 
   expect(await problems.csp()).toEqual([]);
   expect(problems.console).toEqual([]);
@@ -215,6 +216,78 @@ test('offers a short prompt for coding agents that asks only for the key', async
   expect(text.split(/\s+/).length).toBeLessThan(230);
   await page.locator('[data-copy="[data-agent-prompt]"]').click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(text);
+});
+
+test('redraws every demo with an icon picked at the top, and they keep counting', async ({
+  page,
+}) => {
+  const problems = await watchProblems(page);
+  await page.goto(`${API_ORIGIN}/`);
+  const demos = page.locator('[data-demo-slot] appreciate-button');
+  await expect(demos).toHaveCount(DEMO_SLOTS);
+  const hero = page.locator('[data-demo-slot="hero"] appreciate-button');
+  await expect(hero).toHaveAttribute('data-state', 'default');
+  const ownPath = await hero.locator('[part="icon"] svg path').first().getAttribute('d');
+
+  const picker = page.getByLabel('Try it as');
+  await expect(picker).toBeVisible();
+  await picker.selectOption({ label: 'Star' });
+
+  const star = await page.evaluate(
+    () =>
+      (
+        window as unknown as { appreciateDemoIcons: { id: string; svg: string | null }[] }
+      ).appreciateDemoIcons.find((icon) => icon.id === 'star')?.svg ?? '',
+  );
+  const starPath = /\sd="([^"]+)"/.exec(star)?.[1];
+  expect(starPath).toBeTruthy();
+  for (const demo of await demos.all()) {
+    await expect(demo.locator('[part="icon"] svg path').first()).toHaveAttribute(
+      'd',
+      starPath as string,
+    );
+  }
+
+  // Still the real demo: a click counts on the server.
+  const count = hero.locator('[part="count"]');
+  const before = Number(await count.textContent());
+  await hero.locator('button').click();
+  await expect(count).toHaveText(String(before + 1));
+  await hero.evaluate((element) =>
+    (element as unknown as { whenIdle(): Promise<void> }).whenIdle(),
+  );
+
+  await picker.selectOption({ label: 'Heart' });
+  await expect(hero.locator('[part="icon"] svg path').first()).toHaveAttribute(
+    'd',
+    ownPath as string,
+  );
+
+  // Kept for the tab: a reload shows the same pick, a new tab starts on the heart.
+  await picker.selectOption({ label: 'Star' });
+  await page.reload();
+  await expect(picker).toHaveValue('star');
+  await expect(hero.locator('[part="icon"] svg path').first()).toHaveAttribute(
+    'd',
+    starPath as string,
+  );
+  const fresh = await page.context().newPage();
+  await fresh.goto(`${API_ORIGIN}/`);
+  await expect(fresh.getByLabel('Try it as')).toHaveValue('heart');
+  await fresh.close();
+  await picker.selectOption({ label: 'Heart' });
+
+  // The colour beside it paints the demos' full state, and the red brings theirs back.
+  const colour = page.getByLabel('Colour');
+  const red = await colour.inputValue();
+  const fill = hero.locator('svg[data-layer="fill"] path').first();
+  await colour.fill('#2563eb');
+  await expect(fill).toHaveCSS('fill', 'rgb(37, 99, 235)');
+  await colour.fill(red);
+  await expect(fill).not.toHaveCSS('fill', 'rgb(37, 99, 235)');
+
+  expect(await problems.csp()).toEqual([]);
+  expect(problems.console).toEqual([]);
 });
 
 test('explains a refused sign-in', async ({ page }) => {

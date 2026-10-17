@@ -307,7 +307,6 @@ describe('GET /v1/leaderboard', () => {
     const { app, pool } = await context();
     const demo = await ensureDemoButton(pool, {
       demoAllowedOrigins: ['https://appreciate-button.test'],
-      defaultMaxClicks: 10,
     });
     await execute(pool, 'INSERT INTO items (button_id, item_key, total_count) VALUES (?, ?, ?)', [
       demo.buttonId,

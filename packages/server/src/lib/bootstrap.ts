@@ -67,6 +67,13 @@ export const DEMO_TENANT_NAME = 'demo';
 /** Name of the demo button inside that tenant. */
 export const DEMO_BUTTON_NAME = 'Landing demo';
 
+/**
+ * Clicks a visitor gets on the landing page's demo: a few, so trying the
+ * fill, burst and full state takes moments. The demo's own setting, not the
+ * default for new buttons.
+ */
+export const DEMO_MAX_CLICKS = 5;
+
 /** MySQL named lock that serialises concurrent demo bootstraps. */
 const DEMO_LOCK_NAME = 'appreciate_button_demo_bootstrap';
 const DEMO_LOCK_TIMEOUT_SECONDS = 10;
@@ -81,11 +88,12 @@ export interface DemoButtonResult {
 /**
  * Makes sure the landing page's demo button exists: a tenant named `demo`
  * with no owning account, holding one button named `Landing demo` with the
- * default heart and `DEMO_ALLOWED_ORIGINS` as its allowlist.
+ * default heart, `DEMO_MAX_CLICKS` clicks per visitor and
+ * `DEMO_ALLOWED_ORIGINS` as its allowlist.
  *
  * The tenant gets a random management secret that is hashed and dropped, so
  * nobody can manage the demo through the API; it only changes here. On every
- * start the allowlist is brought in line with the environment, and nothing
+ * start the allowlist and the click limit are brought in line, and nothing
  * else about an existing button is touched.
  *
  * Neither the tenant name nor the button name is unique in the schema, so
@@ -94,7 +102,7 @@ export interface DemoButtonResult {
  */
 export async function ensureDemoButton(
   pool: Pool,
-  config: Pick<AppConfig, 'demoAllowedOrigins' | 'defaultMaxClicks'>,
+  config: Pick<AppConfig, 'demoAllowedOrigins'>,
 ): Promise<DemoButtonResult> {
   const connection = await pool.getConnection();
   try {
@@ -136,7 +144,7 @@ export async function ensureDemoButton(
         const inserted = await insertButton(connection, {
           tenantId: tenant.id,
           name: DEMO_BUTTON_NAME,
-          maxClicks: config.defaultMaxClicks,
+          maxClicks: DEMO_MAX_CLICKS,
           allowedOrigins: config.demoAllowedOrigins,
           svgSource: DEFAULT_SVG_SOURCE,
           colors: DEFAULT_COLORS,
@@ -146,10 +154,11 @@ export async function ensureDemoButton(
         button = { id: inserted.id, public_key: inserted.publicKey };
         created = true;
       } else {
-        await execute(connection, 'UPDATE buttons SET allowed_origins = ? WHERE id = ?', [
-          JSON.stringify(config.demoAllowedOrigins),
-          button.id,
-        ]);
+        await execute(
+          connection,
+          'UPDATE buttons SET allowed_origins = ?, max_clicks = ? WHERE id = ?',
+          [JSON.stringify(config.demoAllowedOrigins), DEMO_MAX_CLICKS, button.id],
+        );
       }
 
       return { tenantId: tenant.id, buttonId: button.id, publicKey: button.public_key, created };

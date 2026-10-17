@@ -6,7 +6,7 @@ import { buildApp } from '../../src/app.js';
 import type { Pool } from '../../src/db/pool.js';
 import { createPool } from '../../src/db/pool.js';
 import type { AppConfig } from '../../src/env.js';
-import { ensureDemoButton } from '../../src/lib/bootstrap.js';
+import { DEMO_MAX_CLICKS, ensureDemoButton } from '../../src/lib/bootstrap.js';
 import { ensureSchema, seedTenant, testConfig, truncateAll } from './helpers.js';
 
 const DEMO_ORIGIN = 'https://appreciate-button.test';
@@ -30,10 +30,7 @@ describe('POST /v1/buttons/:publicKey/reset', () => {
     const config = testConfig(overrides);
     pool = createPool(config.databaseUrl);
     await truncateAll(pool);
-    const demo = await ensureDemoButton(pool, {
-      demoAllowedOrigins: [DEMO_ORIGIN],
-      defaultMaxClicks: 10,
-    });
+    const demo = await ensureDemoButton(pool, { demoAllowedOrigins: [DEMO_ORIGIN] });
     demoKey = demo.publicKey;
     app = await buildApp({
       config,
@@ -105,7 +102,7 @@ describe('POST /v1/buttons/:publicKey/reset', () => {
       expect(await state(demoKey, 'landing-hero')).toMatchObject({
         totalCount: 2,
         visitorCount: 0,
-        visitorRemaining: 10,
+        visitorRemaining: DEMO_MAX_CLICKS,
         maxed: false,
       });
       expect(await state(demoKey, 'landing-multi-1')).toMatchObject({
@@ -116,7 +113,7 @@ describe('POST /v1/buttons/:publicKey/reset', () => {
     });
 
     it('gives a maxed visitor a fresh allowance', async () => {
-      for (let i = 0; i < 10; i += 1) await click(demoKey, 'landing-hero');
+      for (let i = 0; i < DEMO_MAX_CLICKS; i += 1) await click(demoKey, 'landing-hero');
       expect((await click(demoKey, 'landing-hero')).maxed).toBe(true);
 
       await reset(demoKey);

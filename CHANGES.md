@@ -3,6 +3,28 @@
 A running record of the significant changes to this repository, newest first.
 Each entry is written so it can seed a PR description.
 
+## 2026-10-17 — Try the button with other icons and colours, and a shorter demo
+
+- **Widget:** an `iconSource` property draws a page-supplied SVG instead of
+  the button's own icon, keeping its colours, ring, burst, sound and
+  counting; `null` brings the button's back. Sanitised like any icon.
+- **Landing page:** a "Try it as" menu and a colour swatch at the top redraw
+  every demo with heart, thumbs up, star, clapping hands, fire, rocket or
+  lightning, in any colour; the demos keep counting for real. The pick is
+  kept in `sessionStorage` for the tab. The icons come from Lucide (ISC) and
+  Phosphor (MIT), credited in `site/demo-icons.js`.
+- **Dashboard:** the button form offers the same icons as tiles under
+  "Icon": the heart is the built-in icon, any other fills in "One SVG".
+  Tiles redraw only when their colour changes, so a click is never lost to a
+  field losing focus.
+- **Header:** sticky on every page; on phones its links are one row that
+  scrolls sideways.
+- **Demo:** five clicks per visitor instead of ten, set on every start, so an
+  existing demo button follows. The pages' copy says five.
+- **Tests:** unit tests for `iconSource`; e2e tests for the menu, the colour,
+  the kept pick, the dashboard tiles and saving one; the bootstrap and reset
+  tests follow the five-click demo.
+
 ## 2026-09-28 — The leaderboard by period
 
 - "Most appreciated" has a filter: Today, This week, This month, This

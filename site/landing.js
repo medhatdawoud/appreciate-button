@@ -233,6 +233,89 @@
     }
   }
 
+  /** Where the visitor's demo look (icon and colour) is kept for this tab. */
+  const LOOK_KEY = 'appreciate-button:demo-look';
+
+  /** The kept look, or none; storage can be unavailable or hold anything. */
+  function readLook() {
+    try {
+      const look = JSON.parse(sessionStorage.getItem(LOOK_KEY) ?? 'null');
+      return look !== null && typeof look === 'object' ? look : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function keepLook(look) {
+    try {
+      sessionStorage.setItem(LOOK_KEY, JSON.stringify(look));
+    } catch {
+      // Not kept; the page works the same.
+    }
+  }
+
+  /**
+   * The "Try it as" menu at the top: redraws every demo button on the page
+   * with the chosen icon (`iconSource`), or its own for the heart, and the
+   * colour beside it paints their clicked and full states through the page's
+   * `--appreciate-*` variables (the themed examples keep their own). Only the
+   * look changes; the demos keep counting on the server as before. Shown only
+   * when the demos run. The pick is kept in sessionStorage, so it lasts while
+   * the tab is open, through reloads and other pages; a new tab starts on the
+   * red heart.
+   */
+  function wireIconPicker(config) {
+    const picker = document.querySelector('[data-icon-pick]');
+    const select = document.querySelector('[data-icon-select]');
+    const icons = window.appreciateDemoIcons;
+    if (!picker || !select || !Array.isArray(icons) || !config.apiUrl || !config.demoKey) return;
+    const colour = document.querySelector('[data-color-pick]');
+    const own = (config.defaultIcon?.colors?.full ?? '#e11d48').toLowerCase();
+    const kept = readLook();
+    const save = () => keepLook({ icon: select.value, colour: colour?.value });
+
+    select.replaceChildren(...icons.map((icon) => new Option(icon.label, icon.id)));
+    const applyIcon = async () => {
+      const chosen = icons.find((icon) => icon.id === select.value);
+      // Set before the bundle defines the element, the value would sit on the
+      // plain element and hide the property it later gets.
+      await customElements.whenDefined('appreciate-button');
+      for (const button of document.querySelectorAll('appreciate-button')) {
+        button.iconSource = chosen?.svg ?? null;
+      }
+    };
+    select.addEventListener('change', () => {
+      save();
+      applyIcon();
+    });
+
+    const applyColour = () => {
+      const root = document.documentElement.style;
+      for (const name of ['--appreciate-clicked', '--appreciate-full']) {
+        if (colour.value.toLowerCase() === own) root.removeProperty(name);
+        else root.setProperty(name, colour.value);
+      }
+    };
+    if (colour) {
+      colour.value = own;
+      colour.addEventListener('input', () => {
+        save();
+        applyColour();
+      });
+    }
+
+    // What this visitor picked earlier in this tab, if it is still on offer.
+    if (icons.some((icon) => icon.id === kept.icon)) {
+      select.value = kept.icon;
+      applyIcon();
+    }
+    if (colour && typeof kept.colour === 'string' && /^#[0-9a-f]{6}$/i.test(kept.colour)) {
+      colour.value = kept.colour;
+      applyColour();
+    }
+    picker.hidden = false;
+  }
+
   async function main() {
     const config = await loadConfig();
     setLinks(config);
@@ -244,6 +327,7 @@
     // Before the demos, so the hero's first ready is in the log.
     wireEventLog();
     mountDemos(config);
+    wireIconPicker(config);
     wireReset(config);
   }
 

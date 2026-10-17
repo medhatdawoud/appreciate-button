@@ -289,6 +289,71 @@ test('walks a new account from its first site to a counted click and back to not
   await expect(view(page, 'signed-out')).toBeVisible();
 });
 
+test('offers suggested icons that fill in the form, and saves the one picked', async ({
+  page,
+  context,
+}) => {
+  await signIn(context);
+  await page.goto(DASHBOARD);
+  await expect(view(page, 'sites')).toBeVisible();
+  const { site } = await dashboardApi<{ site: { id: string } }>(page, '/v1/sites', 'POST', {
+    name: `E2E suggested ${randomUUID().slice(0, 8)}`,
+  });
+  await page.goto(`${DASHBOARD}#/sites/${site.id}/buttons/new`);
+  await expect(view(page, 'button-form')).toBeVisible();
+  await page.locator('textarea[name="allowedOrigins"]').fill(PAGE_ORIGIN);
+
+  const tiles = page.locator('[data-icon-suggestions] button');
+  await expect(tiles).toHaveCount(7);
+  await expect(page.getByRole('button', { name: 'Heart', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await test.info().attach('suggested icons', {
+    body: await page.locator('[data-icon-suggestions]').screenshot(),
+    contentType: 'image/png',
+  });
+
+  await page.getByRole('button', { name: 'Star', exact: true }).click();
+  const star = await page.evaluate(
+    () =>
+      (
+        window as unknown as { appreciateDemoIcons: { id: string; svg: string | null }[] }
+      ).appreciateDemoIcons.find((icon) => icon.id === 'star')?.svg ?? '',
+  );
+  await expect(page.locator('input[name="iconMode"][value="single"]')).toBeChecked();
+  await expect(page.locator('textarea[name="svgSource"]')).toHaveValue(star);
+  await expect(page.getByRole('button', { name: 'Star', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  // The try-it preview draws the star too.
+  const starPath = /\sd="([^"]+)"/.exec(star)?.[1] as string;
+  await expect(
+    page.locator('[data-preview-button] [part="icon"] svg path').first(),
+  ).toHaveAttribute('d', starPath);
+
+  // The tiles follow the colour chosen for the full state.
+  await page.locator('input[name="color-full"]').fill('#00aa00');
+  await expect(tiles.first().locator('svg path').first()).toHaveCSS('fill', rgb('#00aa00'));
+
+  await page.locator('[data-submit]').click();
+  await expect(view(page, 'site')).toBeVisible();
+  const { buttons } = await dashboardApi<{ buttons: { svgSource: string }[] }>(
+    page,
+    `/v1/sites/${site.id}/buttons`,
+    'GET',
+  );
+  expect(buttons.map((button) => button.svgSource)).toEqual([star]);
+
+  // Back to the heart: the built-in icon again.
+  await page.goto(`${DASHBOARD}#/sites/${site.id}/buttons/new`);
+  await expect(view(page, 'button-form')).toBeVisible();
+  await page.getByRole('button', { name: 'Star', exact: true }).click();
+  await page.getByRole('button', { name: 'Heart', exact: true }).click();
+  await expect(page.locator('input[name="iconMode"][value="default"]')).toBeChecked();
+});
+
 test('designs a button from its own SVG, tries it without counting, and saves it with a ring', async ({
   page,
   context,

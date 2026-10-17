@@ -62,6 +62,13 @@
         <img src="img/heart.svg" alt="" width="24" height="24" />
         <span>Appreciate Button</span>
       </a>
+      <div class="icon-pick" data-icon-pick hidden>
+        <label class="icon-pick">
+          <span>Try it as</span>
+          <select data-icon-select></select>
+        </label>
+        <input type="color" data-color-pick aria-label="Colour" title="Colour" />
+      </div>
       <nav class="nav">
         <a href="#install">Install</a>
         <a href="guides/">Guides</a>
@@ -115,16 +122,16 @@
         </div>
         <div class="hero-demo card" data-demo>
           <div class="demo-head">
-            <p class="demo-label">Try it. Click up to ten times.</p>
+            <p class="demo-label">Try it. Click up to five times.</p>
             <button class="reset" type="button" data-reset>Reset my votes</button>
           </div>
           <div class="demo-slot" data-demo-slot="hero"></div>
           <p class="demo-status" data-reset-status role="status" hidden></p>
           <p class="demo-hint">
             It starts gray and fills with colour from the bottom a little more with each click, with
-            a little burst every time. After ten it's full and stops counting. Reload the page: your
-            clicks are still spent, because the cap is enforced on the server, not in your browser.
-            Reset my votes gives you ten more here, on this demo only.
+            a little burst every time. After five it's full and stops counting. Reload the page:
+            your clicks are still spent, because the cap is enforced on the server, not in your
+            browser. Reset my votes gives you five more here, on this demo only.
           </p>
         </div>
         <div class="hero-demo card" data-demo-missing hidden>
@@ -503,6 +510,7 @@ appreciate-button {
     </footer>
 
     <script src="agent-prompt.js"></script>
+    <script src="demo-icons.js"></script>
     <script src="landing.js"></script>
   </body>
 </html>
