@@ -3,6 +3,15 @@
 A running record of the significant changes to this repository, newest first.
 Each entry is written so it can seed a PR description.
 
+## 2026-10-29 — The count in the page's text colour
+
+- The count stays in the page's text colour in every state; it no longer
+  turns the button's `full` colour once the visitor's allowance is spent.
+- A page can colour it with `--appreciate-count`.
+- Docs and the dashboard's colour hint no longer say the colours paint the
+  count. The e2e check for a full button now expects the page's text colour
+  and the variable's override.
+
 ## 2026-10-17 — Try the button with other icons and colours, and a shorter demo
 
 - **Widget:** an `iconSource` property draws a page-supplied SVG instead of

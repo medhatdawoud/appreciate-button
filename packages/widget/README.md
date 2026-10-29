@@ -87,7 +87,7 @@ The element reflects `data-state` on itself so the host page can style around it
 
 - `default` — clickable.
 - `clicked` — held for 350 ms after each click; the icon pulses and its filled part takes the `clicked` colour, and the count rolls up to its new number: the old one slides up and out while the new one slides in from below, clipped to the count's line (about 0.3 s). Only a counted click rolls it; loading, server corrections, a reset and clicks on a spent button change it without animating. Reduced motion swaps it instantly.
-- `full` — this visitor has used their allowance; the icon is fully coloured, and the count takes the `full` colour too.
+- `full` — this visitor has used their allowance; the icon is fully coloured. The count stays in the page's text colour.
   The button stays clickable: every further click counts nothing and replays
   the burst (below). It carries `aria-disabled="true"` and an accessible name
   ending in "all used", so assistive tech still reports it as finished.
@@ -187,6 +187,7 @@ appreciate-button {
   --appreciate-hover: #6b7280; /* the silhouette while hovered */
   --appreciate-clicked: orange; /* the filled part during the pulse */
   --appreciate-full: gold; /* the filled part */
+  --appreciate-count: #6b7280; /* the count; the page's text colour by default */
 }
 ```
 

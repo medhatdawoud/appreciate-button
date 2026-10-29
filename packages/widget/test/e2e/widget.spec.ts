@@ -310,8 +310,12 @@ test('fills up at the cap and stays full even after localStorage is cleared', as
   await expect(ui.button).toHaveAttribute('aria-disabled', 'true');
   await expect(ui.host).toHaveAttribute('data-progress', '100');
   await expect(ui.fill).toHaveCSS('fill', rgb(fixture.colors.full));
-  // Full: the count takes the full colour too.
-  await expect(ui.count).toHaveCSS('color', rgb(fixture.colors.full));
+  // Full or not, the count is text on the page, in the page's text colour.
+  const pageText = await page.evaluate(() => getComputedStyle(document.body).color);
+  await expect(ui.count).toHaveCSS('color', pageText);
+  await ui.host.evaluate((element) => element.style.setProperty('--appreciate-count', '#123456'));
+  await expect(ui.count).toHaveCSS('color', rgb('#123456'));
+  await ui.host.evaluate((element) => element.style.removeProperty('--appreciate-count'));
   // Full: exactly the drawing is revealed, so the inset is the empty space
   // above the heart, not 0.
   const atCap = await settledInsetTop(ui.fill);

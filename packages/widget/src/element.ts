@@ -98,7 +98,8 @@ const RING_PADDING = 0.3;
  * The count and the gap scale with `--appreciate-size`: the count is 65% of
  * it, a step below the icon so the two do not compete, and the gap half of it
  * (three quarters with a ring, so the count stands clear of it).
- * Once the allowance is spent the count takes the `full` colour too.
+ * The count is in the page's text colour in every state, or in
+ * `--appreciate-count` when the page sets it.
  *
  * `[part="count"]` holds the number in a one-line, clipped grid cell. When a
  * click raises it, the old number rolls up and out (`.roll-out`) while the new
@@ -166,15 +167,16 @@ button:disabled { cursor: default; }
 :host([data-ring][data-count="bottom"]) button {
   gap: calc(var(--appreciate-size, 1.5em) / 2);
 }
+/* The count is text on the page: it takes the page's text colour in every
+   state, unless the page sets --appreciate-count. */
 [part="count"] {
+  color: var(--appreciate-count, inherit);
   font-size: calc(var(--appreciate-size, 1.5em) * 0.65);
-  transition: color 300ms ease;
   display: inline-grid;
   overflow: hidden;
   justify-items: start;
 }
 :host([data-count="left"]) [part="count"] { justify-items: end; }
-:host([data-state="full"]) [part="count"] { color: var(--appreciate-full, var(--_c-full)); }
 :host([data-count="top"]) [part="count"],
 :host([data-count="bottom"]) [part="count"] { justify-items: center; }
 [part="count"] > span { grid-area: 1 / 1; }

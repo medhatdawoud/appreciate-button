@@ -581,6 +581,7 @@ appreciate-button {
   --appreciate-hover: #374151; /* both while hovered */
   --appreciate-clicked: #f43f5e; /* the filled part during the pulse */
   --appreciate-full: #e11d48; /* the filled part */
+  --appreciate-count: #6b7280; /* the count; the page's text colour by default */
 }
 appreciate-button::part(count) {
   font-weight: 600;
@@ -642,7 +643,7 @@ icons: hearts, stars, claps, logos-as-glyphs.
 **Keep its own colours** (`keepIconColors: true`, or the dashboard checkbox)
 for multi-colour mascots and logos: the SVG is drawn as designed, grayscale at
 first, filling into its real colours as visitors click. The four colours then
-only paint the ring and the count once full.
+only paint the ring.
 
 **A ring** (`iconRing: true`, or "Draw a circle around the icon") puts a 1px
 circle around any of these icons, in the colour of the state it is in.

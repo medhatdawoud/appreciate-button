@@ -397,9 +397,9 @@
     const mode = iconMode();
     $('[data-colors-hint]').textContent =
       mode === 'states'
-        ? 'Each state shows its own drawing. The colours tint the circle and the count once full.'
+        ? 'Each state shows its own drawing. The colours tint the circle around it.'
         : mode === 'single' && form.elements.keepIconColors.checked
-          ? 'The SVG keeps its own colours: grayscale at first, then its real colours as it fills. The colours tint the circle and the count once full.'
+          ? 'The SVG keeps its own colours: grayscale at first, then its real colours as it fills. The colours tint the circle around it.'
           : mode === 'single'
             ? 'Your SVG is painted with these colours, filling up with “full” as visitors click.'
             : 'The built-in heart, painted with these colours.';
